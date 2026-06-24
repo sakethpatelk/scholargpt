@@ -181,9 +181,7 @@ latency, source counts, and answer previews.
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_BACKEND` | `auto` | `auto` / `anthropic` / `ollama` / `none` |
-| `ANTHROPIC_API_KEY` | _(empty)_ | Claude API key; skipped if unset |
-| `CLAUDE_MODEL` | `claude-opus-4-8` | Claude model ID |
+| `LLM_BACKEND` | `auto` | `auto` / `ollama` / `none` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Ollama model name |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model |
