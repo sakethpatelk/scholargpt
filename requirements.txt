@@ -1,9 +1,6 @@
 # Web UI
 streamlit>=1.35.0
 
-# Claude LLM
-anthropic>=0.40.0
-
 # RAG orchestration helpers
 langchain-text-splitters>=0.3.0
 

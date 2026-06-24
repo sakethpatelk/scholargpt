@@ -1,33 +1,24 @@
 """
-LLM answer generation with a three-tier backend:
+LLM answer generation with a two-tier backend:
 
-  1. Anthropic Claude  — if ANTHROPIC_API_KEY is set (or LLM_BACKEND=anthropic)
-  2. Ollama            — local model, free, no key needed (default free path)
-  3. Retrieval-only    — honest fallback, never crashes
+  1. Ollama  — local model, free, no key needed (default)
+  2. Retrieval-only — honest fallback, shows raw passages, never crashes
 
 Backend selection (LLM_BACKEND=auto by default):
-  - "auto"      : Anthropic if key present, else Ollama if reachable, else fallback
-  - "anthropic" : force Claude API
-  - "ollama"    : force Ollama
-  - "none"      : skip LLM entirely
+  - "auto"   : use Ollama if reachable, else retrieval-only
+  - "ollama" : force Ollama
+  - "none"   : skip LLM entirely, always show raw passages
 
-Interview note — why Ollama over calling OpenAI-compatible endpoints:
-  Ollama runs entirely on-device, has no rate limits, and works offline.
-  We call its /api/chat endpoint via httpx (already a transitive dependency),
-  so no extra package is needed.
+Interview note — why Ollama:
+  Runs entirely on-device, no API key, no rate limits, works offline.
+  We call /api/chat via httpx (already a transitive dependency of the project).
 """
 import logging
 from typing import Any
 
 import httpx
 
-from src.config import (
-    ANTHROPIC_API_KEY,
-    CLAUDE_MODEL,
-    LLM_BACKEND,
-    OLLAMA_BASE_URL,
-    OLLAMA_MODEL,
-)
+from src.config import LLM_BACKEND, OLLAMA_BASE_URL, OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +47,7 @@ def build_context_block(chunks: list[dict[str, Any]]) -> str:
 
 
 def get_active_backend() -> str:
-    """
-    Return the backend that will be used for the next generate_answer call.
-    Used by the Streamlit sidebar to show the current mode.
-    """
+    """Return the backend that will be used: 'ollama' or 'none'."""
     return _select_backend()
 
 
@@ -68,18 +56,12 @@ def generate_answer(
     chunks: list[dict[str, Any]],
     chat_history: list[dict[str, str]] | None = None,
 ) -> str:
-    """Route to the best available LLM backend and return a grounded answer."""
+    """Route to Ollama if available, otherwise return retrieval-only fallback."""
     context = build_context_block(chunks)
     messages = _build_messages(context, query, chat_history)
     backend = _select_backend()
 
-    if backend == "anthropic":
-        result = _call_anthropic(messages)
-        if result:
-            return result
-        logger.warning("Anthropic call failed — falling back to retrieval-only")
-
-    elif backend == "ollama":
+    if backend == "ollama":
         result = _call_ollama(messages)
         if result:
             return result
@@ -91,22 +73,13 @@ def generate_answer(
 # ── Backend selection ──────────────────────────────────────────────────────
 
 def _select_backend() -> str:
-    """Return 'anthropic', 'ollama', or 'none' based on config and availability."""
-    if LLM_BACKEND == "anthropic":
-        return "anthropic" if ANTHROPIC_API_KEY else "none"
-
-    if LLM_BACKEND == "ollama":
-        return "ollama"
-
+    """Return 'ollama' or 'none'."""
     if LLM_BACKEND == "none":
         return "none"
-
-    # auto mode: prefer Anthropic, fall through to Ollama, then none
-    if ANTHROPIC_API_KEY:
-        return "anthropic"
-    if _is_ollama_available():
+    if LLM_BACKEND == "ollama":
         return "ollama"
-    return "none"
+    # auto: use Ollama if reachable
+    return "ollama" if _is_ollama_available() else "none"
 
 
 def _is_ollama_available() -> bool:
@@ -125,7 +98,7 @@ def _build_messages(
     query: str,
     chat_history: list[dict[str, str]] | None,
 ) -> list[dict[str, str]]:
-    """Assemble the messages list (OpenAI-style, works for both backends)."""
+    """Assemble the messages list (OpenAI-style chat format)."""
     user_message = (
         f"Context from uploaded research papers:\n\n{context}\n\n"
         f"---\n\nQuestion: {query}\n\n"
@@ -140,31 +113,9 @@ def _build_messages(
     return messages
 
 
-def _call_anthropic(messages: list[dict[str, str]]) -> str | None:
-    """Call Claude API. Returns text on success, None on any error."""
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=2048,
-            thinking={"type": "adaptive"},
-            system=SYSTEM_PROMPT,
-            messages=messages,
-        )
-        for block in response.content:
-            if block.type == "text":
-                return block.text
-        return None
-    except Exception as exc:
-        logger.error("Anthropic API error: %s", exc)
-        return None
-
-
 def _call_ollama(messages: list[dict[str, str]]) -> str | None:
     """
-    Call local Ollama via its /api/chat endpoint (non-streaming).
+    Call local Ollama via /api/chat (non-streaming).
     Returns text on success, None on any error.
     Used by the evaluation script and validate_rag.py.
     """
@@ -193,9 +144,7 @@ def stream_ollama_answer(
 ):
     """
     Generator that yields answer tokens from Ollama one chunk at a time.
-    Used by app.py with st.write_stream() so the UI updates incrementally
-    instead of blocking for the full generation time.
-
+    Used by app.py with st.write_stream() so the UI updates incrementally.
     Falls back to yielding the full fallback string if Ollama is unreachable.
     """
     context = build_context_block(chunks)
@@ -233,7 +182,7 @@ def stream_ollama_answer(
 # ── Fallback ───────────────────────────────────────────────────────────────
 
 def _fallback_answer(query: str, chunks: list[dict[str, Any]]) -> str:
-    """Return raw retrieved passages when no LLM backend is available."""
+    """Return raw retrieved passages when Ollama is unavailable."""
     if not chunks:
         return (
             "No relevant information found in the uploaded documents. "
@@ -241,7 +190,7 @@ def _fallback_answer(query: str, chunks: list[dict[str, Any]]) -> str:
         )
 
     lines = [
-        "[INFO] No LLM backend available. Showing raw retrieved passages:\n",
+        "[INFO] Ollama not running. Showing raw retrieved passages:\n",
         f"**Query:** {query}\n",
     ]
     for i, chunk in enumerate(chunks[:3], 1):

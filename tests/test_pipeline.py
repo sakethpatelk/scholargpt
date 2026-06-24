@@ -89,7 +89,7 @@ def test_fallback_answer_includes_filename_and_page():
 
 def test_fallback_answer_warns_about_api():
     result = _fallback_answer("x", [{"text": "y", "filename": "z.pdf", "page": 1}])
-    # fallback message uses [INFO] prefix since either Anthropic or Ollama may be absent
+    # fallback message uses [INFO] prefix when Ollama is not running
     assert "[INFO]" in result or "unavailable" in result.lower() or "No LLM" in result
 
 

@@ -42,14 +42,12 @@ with st.sidebar:
     st.caption("Upload research PDFs · Ask questions · Get cited answers")
 
     backend = get_active_backend()
-    if backend == "anthropic":
-        st.success("LLM: Claude (Anthropic API)", icon="✅")
-    elif backend == "ollama":
+    if backend == "ollama":
         st.info("LLM: Ollama (local)", icon="🦙")
     else:
         st.warning(
-            "No LLM backend active. Install Ollama or set `ANTHROPIC_API_KEY` "
-            "in `.env` to enable generated answers. Retrieval + citations still work.",
+            "Ollama not detected. Start Ollama (`ollama serve`) to enable "
+            "generated answers. Retrieval + citations still work.",
             icon="⚠️",
         )
 

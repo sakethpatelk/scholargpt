@@ -28,5 +28,4 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v --tb=short
         env:
-          # Ensure tests never accidentally hit a real API
-          ANTHROPIC_API_KEY: ""
+          LLM_BACKEND: "none"

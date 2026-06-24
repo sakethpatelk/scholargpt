@@ -6,7 +6,7 @@
 
 A master's-level **Retrieval-Augmented Generation** web app. Upload research
 PDFs, ask questions in natural language, and receive grounded answers with
-page-level citations — powered by ChromaDB, sentence-transformers, Ollama, and Claude.
+page-level citations — powered by ChromaDB, sentence-transformers, and Ollama.
 
 ---
 
@@ -14,17 +14,17 @@ page-level citations — powered by ChromaDB, sentence-transformers, Ollama, and
 
 ```
 User
- │
- ▼
+ |
+ v
 Streamlit UI (app.py)
- │
- ▼
+ |
+ v
 RAGPipeline (src/rag_pipeline.py)        <- single public facade
- ├── pdf_loader.py   PyMuPDF text extraction
- ├── chunker.py      RecursiveCharacterTextSplitter (800 chars, 150 overlap)
- ├── vector_store.py ChromaDB + sentence-transformers bi-encoder (all-MiniLM-L6-v2)
- ├── retriever.py    Bi-encoder recall -> cross-encoder reranking
- └── llm.py          Ollama (local) | Claude API | retrieval-only fallback
+ |-- pdf_loader.py   PyMuPDF text extraction
+ |-- chunker.py      RecursiveCharacterTextSplitter (800 chars, 150 overlap)
+ |-- vector_store.py ChromaDB + sentence-transformers bi-encoder (all-MiniLM-L6-v2)
+ |-- retriever.py    Bi-encoder recall -> cross-encoder reranking
+ +-- llm.py          Ollama streaming | retrieval-only fallback
 ```
 
 **Two-stage retrieval** (interview talking point):
@@ -35,8 +35,7 @@ RAGPipeline (src/rag_pipeline.py)        <- single public facade
 | Cross-encoder reranking | Single-encoder | Slow (O(K) passes) | Better |
 
 Bi-encoder retrieves `TOP_K=5` candidates; cross-encoder re-scores and keeps
-the top `RERANK_TOP_K=3`. The combination is the industry-standard approach
-for production RAG.
+the top `RERANK_TOP_K=3`. This is the industry-standard approach for production RAG.
 
 ---
 
@@ -44,14 +43,13 @@ for production RAG.
 
 - PDF upload and text extraction (multi-page, multi-document)
 - Semantic chunking with filename + page metadata preserved
-- Local embedding generation — no external API needed for embeddings
+- Local embedding generation — no external API needed
 - Persistent ChromaDB vector store (survives restarts)
 - Cross-encoder reranking for higher retrieval precision
-- Streaming answers via Ollama (llama3.2:3b / llama3.1) — fully local and free
-- Claude API support for cloud-powered answers
+- Streaming answers via Ollama (llama3.2:3b recommended) — fully local and free
 - `[Source N]` citations with filename and page number on every answer
 - Multi-turn chat history (last 4 turns passed as context)
-- Three-tier fallback: Claude → Ollama → retrieval-only (never crashes)
+- Graceful fallback: shows raw retrieved passages if Ollama is not running
 - Document management: list and delete individual PDFs
 - Evaluation script (`src/evaluation.py`) for batch testing
 
@@ -61,7 +59,7 @@ for production RAG.
 
 ### Prerequisites
 - Python 3.11+
-- **Ollama** 
+- [Ollama](https://ollama.com) for local LLM generation
 
 ### Install
 
@@ -82,8 +80,23 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env to choose your LLM backend (see section below)
+# Defaults work out of the box — edit OLLAMA_MODEL if needed
 ```
+
+### Set up Ollama
+
+1. Install from **https://ollama.com**
+
+2. Pull a model:
+   ```bash
+   ollama pull llama3.2:3b   # ~2 GB, fast on CPU — recommended
+   ollama pull llama3.1      # ~4.7 GB, higher quality but slower
+   ```
+
+3. Start the server:
+   ```bash
+   ollama serve
+   ```
 
 ### Run
 
@@ -92,52 +105,7 @@ streamlit run app.py
 ```
 
 Open **http://localhost:8501**, upload a PDF, and start asking questions.
-
----
-
-## LLM Backend
-
-ScholarGPT selects a backend automatically (`LLM_BACKEND=auto` in `.env`):
-
-| Priority | Backend | Requirement |
-|---|---|---|
-| 1 | **Anthropic Claude** | `ANTHROPIC_API_KEY` set in `.env` |
-| 2 | **Ollama (local)** | `ollama serve` running on port 11434 |
-| 3 | **Retrieval-only** | No LLM — raw passages shown with citations |
-
-### Using Ollama (free, runs locally)
-
-1. Download and install Ollama from **https://ollama.com**
-
-2. Pull a model (choose one):
-   ```bash
-   ollama pull llama3.2:3b   # ~2 GB, fast on CPU — recommended
-   ollama pull llama3.1      # ~4.7 GB, higher quality
-   ollama pull mistral       # ~4.1 GB, alternative
-   ```
-
-3. Start the Ollama server:
-   ```bash
-   ollama serve
-   ```
-
-4. Set the model in `.env`:
-   ```
-   OLLAMA_MODEL=llama3.2:3b
-   ```
-
-5. Launch the app — the sidebar will show **"LLM: Ollama (local)"**.
-   Answers stream token-by-token as the model generates them.
-
-### Using Claude (Anthropic API)
-
-Set in `.env`:
-```
-ANTHROPIC_API_KEY=sk-ant-api03-...
-LLM_BACKEND=auto   # or "anthropic" to force it
-```
-
-The sidebar will show **"LLM: Claude (Anthropic API)"**.
+The sidebar shows **"LLM: Ollama (local)"** when the backend is active.
 
 ---
 
@@ -146,21 +114,14 @@ The sidebar will show **"LLM: Claude (Anthropic API)"**.
 ```bash
 docker build -t scholargpt .
 
-# With Ollama on the host:
 docker run -p 8501:8501 \
   -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
   -e OLLAMA_MODEL=llama3.2:3b \
   -v "$(pwd)/data:/app/data" \
   scholargpt
-
-# With Claude API:
-docker run -p 8501:8501 \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
-  -v "$(pwd)/data:/app/data" \
-  scholargpt
 ```
 
-The `-v` flag persists ChromaDB and uploaded files between container restarts.
+The `-v` flag persists the ChromaDB index and uploaded files between restarts.
 
 ---
 
@@ -200,14 +161,13 @@ latency, source counts, and answer previews.
 - English-only (no multilingual embedding model configured by default)
 - Plain text extraction only — tables and figures are not handled
 - ChromaDB is single-machine; not suitable for distributed deployments as-is
-- First run downloads embedding/reranker models from HuggingFace (~80–100 MB)
+- First run downloads embedding/reranker models from HuggingFace (~80-100 MB)
 - Ollama responses on CPU are slow for large models (use llama3.2:3b for speed)
 
 ## Future improvements
 
 - Hybrid search (BM25 sparse + semantic dense)
 - RAGAS-based automated evaluation (faithfulness, answer relevancy)
-- Streaming Claude responses via `client.messages.stream()`
 - Per-user document isolation with session keys
 - Table and figure extraction (PyMuPDF block-level API)
 - Distributed vector store (Qdrant, Weaviate, Pinecone)
