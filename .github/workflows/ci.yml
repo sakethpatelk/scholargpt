@@ -1,0 +1,32 @@
+name: Lint & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/ app.py
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        env:
+          # Ensure tests never accidentally hit a real API
+          ANTHROPIC_API_KEY: ""

@@ -1,0 +1,24 @@
+# Web UI
+streamlit>=1.35.0
+
+# Claude LLM
+anthropic>=0.40.0
+
+# RAG orchestration helpers
+langchain-text-splitters>=0.3.0
+
+# Vector database
+chromadb>=0.5.0
+
+# Embeddings + reranker (downloads models from HuggingFace Hub on first run)
+sentence-transformers>=3.0.0
+
+# PDF text extraction
+pymupdf>=1.24.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# Dev / CI
+pytest>=8.0.0
+ruff>=0.4.0
