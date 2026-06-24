@@ -61,7 +61,7 @@ for production RAG.
 
 ### Prerequisites
 - Python 3.11+
-- **Ollama** (recommended, free, local) — or an Anthropic API key for Claude
+- **Ollama** 
 
 ### Install
 
