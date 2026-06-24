@@ -24,17 +24,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Session state ──────────────────────────────────────────────────────────
-# RAGPipeline is created once per browser session and cached in session_state.
-# This means the VectorStore (and loaded embedding model) survive reruns.
-if "pipeline" not in st.session_state:
-    with st.spinner("Initialising RAG pipeline…"):
-        st.session_state.pipeline = RAGPipeline()
 
+# ── Pipeline (process-level singleton) ────────────────────────────────────
+# cache_resource creates one RAGPipeline for the whole server process.
+# This avoids creating multiple ChromaDB PersistentClient instances for the
+# same path, which causes a KeyError in chromadb's _identifier_to_system map.
+@st.cache_resource(show_spinner="Initialising RAG pipeline…")
+def get_pipeline() -> RAGPipeline:
+    return RAGPipeline()
+
+
+pipeline: RAGPipeline = get_pipeline()
+
+# ── Session state ──────────────────────────────────────────────────────────
 if "chat_history" not in st.session_state:
     st.session_state.chat_history: list[dict] = []
-
-pipeline: RAGPipeline = st.session_state.pipeline
 
 # ── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -101,7 +105,7 @@ with st.sidebar:
         st.rerun()
 
     st.caption(
-        f"Model: `{st.session_state.pipeline.store.encoder.get_sentence_embedding_dimension()}`-dim "
+        f"Model: `{pipeline.store.encoder.get_sentence_embedding_dimension()}`-dim "
         f"embeddings  |  Top-K: retrieve then rerank"
     )
 
