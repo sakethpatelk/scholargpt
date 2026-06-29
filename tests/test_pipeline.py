@@ -3,7 +3,6 @@ Unit tests for the components that don't require an API key or a GPU.
 
 Run: pytest tests/ -v
 """
-import pytest
 from unittest.mock import MagicMock, patch
 
 from src.chunker import chunk_pages
